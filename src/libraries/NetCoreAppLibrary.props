@@ -128,6 +128,7 @@
       System.Threading;
       System.Threading.Channels;
       System.Threading.Overlapped;
+      System.Threading.ResourceLimits;
       System.Threading.Tasks;
       System.Threading.Tasks.Dataflow;
       System.Threading.Tasks.Extensions;

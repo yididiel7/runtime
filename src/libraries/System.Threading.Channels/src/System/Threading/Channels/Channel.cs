@@ -61,5 +61,15 @@ namespace System.Threading.Channels
 
             return new BoundedChannel<T>(options.Capacity, options.FullMode, !options.AllowSynchronousContinuations, itemDropped);
         }
+
+        public static Channel<T> CreateLimited<T>(LimitedChannelOptions options)
+        {
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+
+            return new LimitedChannel<T>(options);
+        }
     }
 }

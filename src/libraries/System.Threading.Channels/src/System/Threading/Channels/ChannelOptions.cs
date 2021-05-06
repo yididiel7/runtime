@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Threading.ResourceLimits;
+
 namespace System.Threading.Channels
 {
     /// <summary>Provides options that control the behavior of channel instances.</summary>
@@ -97,5 +99,10 @@ namespace System.Threading.Channels
     /// <summary>Provides options that control the behavior of <see cref="UnboundedChannel{T}"/> instances.</summary>
     public sealed class UnboundedChannelOptions : ChannelOptions
     {
+    }
+
+    public sealed class LimitedChannelOptions : ChannelOptions
+    {
+        public ResourceLimiter Limiter { get; set; }
     }
 }
