@@ -17,7 +17,7 @@ namespace System.Threading.Channels
         /// <summary>Task that indicates the channel has completed.</summary>
         private readonly TaskCompletionSource _completion;
         /// <summary>The items in the channel.</summary>
-        private readonly ConcurrentQueue<T> _items = new ConcurrentQueue<T>();
+        private readonly ConcurrentQueue<(T, Resource)> _items = new ConcurrentQueue<(T, Resource)>();
         /// <summary>Readers blocked reading from the channel.</summary>
         private readonly Deque<AsyncOperation<T>> _blockedReaders = new Deque<AsyncOperation<T>>();
         /// <summary>Whether to force continuations to be executed asynchronously from producer writes.</summary>
@@ -67,10 +67,11 @@ namespace System.Threading.Channels
 
                 // Dequeue an item if we can.
                 LimitedChannel<T> parent = _parent;
-                if (parent._items.TryDequeue(out T? item))
+                if (parent._items.TryDequeue(out (T Item, Resource Resource) result))
                 {
+                    result.Resource.Dispose();
                     CompleteIfDone(parent);
-                    return new ValueTask<T>(item);
+                    return new ValueTask<T>(result.Item);
                 }
 
                 lock (parent.SyncObj)
@@ -78,10 +79,11 @@ namespace System.Threading.Channels
                     //parent.AssertInvariants();
 
                     // Try to dequeue again, now that we hold the lock.
-                    if (parent._items.TryDequeue(out item))
+                    if (parent._items.TryDequeue(out (T Item, Resource Resource) resultLocked))
                     {
+                        resultLocked.Resource.Dispose();
                         CompleteIfDone(parent);
-                        return new ValueTask<T>(item);
+                        return new ValueTask<T>(resultLocked.Item);
                     }
 
                     // There are no items, so if we're done writing, fail.
@@ -113,9 +115,11 @@ namespace System.Threading.Channels
                 LimitedChannel<T> parent = _parent;
 
                 // Dequeue an item if we can
-                if (parent._items.TryDequeue(out item))
+                if (parent._items.TryDequeue(out (T Item, Resource Resource) result))
                 {
+                    result.Resource.Dispose();
                     CompleteIfDone(parent);
+                    item = result.Item;
                     return true;
                 }
 
@@ -237,16 +241,13 @@ namespace System.Threading.Channels
             {
                 if (_parent._options.Limiter.TryAcquire(out Resource resource))
                 {
-                    using (resource)
-                    {
-                        return TryWriteCore(item);
-                    }
+                    return TryWriteCore(item, resource);
                 }
 
                 return false;
             }
 
-            public bool TryWriteCore(T item)
+            public bool TryWriteCore(T item, Resource resource)
             {
                 LimitedChannel<T> parent = _parent;
                 while (true)
@@ -259,6 +260,7 @@ namespace System.Threading.Channels
                         //parent.AssertInvariants();
                         if (parent._doneWriting != null)
                         {
+                            resource.Dispose();
                             return false;
                         }
 
@@ -270,7 +272,7 @@ namespace System.Threading.Channels
                         // need to do so outside of the lock.
                         if (parent._blockedReaders.IsEmpty)
                         {
-                            parent._items.Enqueue(item);
+                            parent._items.Enqueue((item, resource));
                             waitingReadersTail = parent._waitingReadersTail;
                             if (waitingReadersTail == null)
                             {
@@ -335,12 +337,11 @@ namespace System.Threading.Channels
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                using (await _parent._options.Limiter.AcquireAsync(cancellationToken).ConfigureAwait(false))
+                Resource resource = await _parent._options.Limiter.AcquireAsync(cancellationToken).ConfigureAwait(false)
+
+                if (!TryWriteCore(item, resource))
                 {
-                    if (!TryWriteCore(item))
-                    {
-                        throw ChannelUtilities.CreateInvalidCompletionException(_parent._doneWriting);
-                    }
+                    throw ChannelUtilities.CreateInvalidCompletionException(_parent._doneWriting);
                 }
             }
         }
