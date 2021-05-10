@@ -38,7 +38,6 @@ namespace System.Threading.Channels
             Writer = new LimitedChannelWriter(this);
         }
 
-        // This is identical to UnboundedChannelReader.
         private sealed class LimitedChannelReader : ChannelReader<T>
         {
             internal readonly LimitedChannel<T> _parent;
@@ -293,6 +292,7 @@ namespace System.Threading.Channels
                         // case we loop around to try everything again.
                         if (blockedReader.TrySetResult(item))
                         {
+                            resource.Dispose();
                             return true;
                         }
                     }
@@ -337,7 +337,7 @@ namespace System.Threading.Channels
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                Resource resource = await _parent._options.Limiter.AcquireAsync(cancellationToken).ConfigureAwait(false)
+                Resource resource = await _parent._options.Limiter.AcquireAsync(cancellationToken).ConfigureAwait(false);
 
                 if (!TryWriteCore(item, resource))
                 {
