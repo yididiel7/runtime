@@ -538,14 +538,16 @@ namespace System
         {
             // Ternary operator returning true/false prevents redundant asm generation:
             // https://github.com/dotnet/runtime/issues/4207
-            return (value == null || 0 == value.Length) ? true : false;
+            return value is null or { Length: 0 } ? true : false;
         }
 
         public static bool IsNullOrWhiteSpace([NotNullWhen(false)] string? value)
         {
             if (value == null) return true;
 
-            for (int i = 0; i < value.Length; i++)
+            // Most strings start with non-whitespace characters, start at the end of the string instead where -
+            // statistically speaking, it is more likely for a string to end with whitespace characters.
+            for (int i = value.Length - 1; i >= 0; i--)
             {
                 if (!char.IsWhiteSpace(value[i])) return false;
             }
